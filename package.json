@@ -1,0 +1,6 @@
+{
+  "name": "pr-review-assist",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --experimental-vm-modules --test tests/*.test.mjs", "install-mod": "python3 scripts/install.py" }
+}
