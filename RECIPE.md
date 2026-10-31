@@ -9,9 +9,9 @@ Put **View PRs** immediately to the right of **Changes** in Herdr desktop. It op
 Use Herdr's current theme and UI font. The panel is 420px wide initially, with a 1px theme border and 10px corners. From top to bottom:
 
 - A 42px header: **PR Review Assist**, **Settings**, and a refresh button.
-- A muted repository name, then **All**, **Mine**, and **To review** filter buttons.
+- The repository folder name in dim 11px text (tooltip: full path), then **All**, **Mine**, and **To review** filter buttons.
 - A scrolling body, with optional settings above the PR rows.
-- A small footer showing the loaded open-PR count, or **Refreshing…**, and a reminder that rows open GitHub.
+- An 11px footer reading `3 open · Row opens GitHub` (`3 open+` when more can load), or **Refreshing…** while loading.
 
 Each PR row has 10px padding, 6px spacing, a 14px PR icon, a wrapping title, number, author and a 28px **Review** button. Below its metadata are the lifecycle status and optional review decision, then a CI icon and counts. Use 13px body text, 12px controls and 11px supporting text. Hover highlights the row. Its tooltip shows source and target branches.
 
@@ -23,7 +23,7 @@ The inline chooser has the PR number, **Cancel**, the substituted message, exist
 
 The focused terminal determines repository and machine. Focusing a mod pane preserves the previous terminal context within that space, with its sibling terminal as a fallback. Changing folder or space clears the old list and chooser; late responses from the old context never paint the new one.
 
-List open PRs in most-recently-updated order, 20 at a time. **Mine** filters by the authenticated author; **To review** filters by review requests for that user. **Load more** asks for 20 additional results. Refresh every 60 seconds while visible and on the refresh button. Loading, no-result and error states are readable text. Missing tools, authentication and repository problems show errors; refreshing can retry.
+List open PRs in most-recently-updated order, 20 at a time. **Mine** filters by the authenticated author; **To review** filters by review requests for that user. **Load more** asks for 20 additional results. Refresh every 60 seconds while visible and on the refresh button. Loading shows **Loading pull requests…**. Empty lists say **No open pull requests**, **No open pull requests of yours** or **No reviews requested**, with **Refresh to check GitHub again.** below. Errors show **Couldn't load pull requests** and the message. Missing tools, authentication and repository problems show errors; refreshing can retry.
 
 A row opens its exact GitHub URL. **Review** stops propagation and toggles the chooser without opening GitHub. Choosing a destination only selects it. The final dispatch button is disabled until a choice is made. Existing **idle** and **done** agents are selectable; **working** and **blocked** agents remain visible but muted and marked unavailable. Show each agent's program, tab name, literal status and terminal address. An exited agent cannot receive a message. Show installed new-agent programs in Herdr's preferred order; a new review opens a tab in this repository and space. Do not interrupt busy agents. Recheck readiness at send time. Prevent duplicate existing-agent sends; a failed send retains the chooser and error, and a successful send closes it with confirmation. Herdr handles new-agent launch errors. **Cancel** or Escape closes the chooser when no send is in progress.
 
