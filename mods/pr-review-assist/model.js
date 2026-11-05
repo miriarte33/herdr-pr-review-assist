@@ -9,6 +9,9 @@ export function templateError(value) {
   if (!value.includes("{pr_number}")) return "Include {pr_number} so the agent knows which PR to review.";
   return null;
 }
+export function messageError(value) {
+  return value.trim() ? null : "Enter a review message.";
+}
 export function reviewMessage(template, number) {
   const error = templateError(template);
   if (error) throw new Error(error);

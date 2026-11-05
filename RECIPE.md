@@ -1,6 +1,6 @@
 # PR Review Assist
 
-Put **View PRs** immediately to the right of **Changes** in Herdr desktop. It opens a side panel of the focused repository's open GitHub pull requests, with PR status, review decision and CI counts. Clicking a row opens GitHub; **Review** expands an agent chooser and message preview. **Settings**, in that same panel, edits the review message.
+Put **View PRs** immediately to the right of **Changes** in Herdr desktop. It opens a side panel of the focused repository's open GitHub pull requests, with PR status, review decision and CI counts. Clicking a row opens GitHub; **Review** expands an agent chooser and an editable review message. **Settings**, in that same panel, edits the review message.
 
 ![PR Review Assist](preview.png)
 
@@ -17,7 +17,7 @@ Each PR row has 10px padding, 6px spacing, a 14px PR icon, a wrapping title, num
 
 Open PRs are green; drafts are muted. Lifecycle rendering also recognizes Closed (red) and Merged (accent), although the list only fetches open PRs. Review decisions read **Approved**, **Changes requested**, or **Review required**; changes requested is red. CI reads, for example, **2 failing · 5 passing · 1 pending**, with skipped and unknown counts when applicable. A red circle-X means failures; an amber clock means pending without failures; a green circle-check means passing without pending or unknown results. Empty, unknown or entirely skipped results get a muted circle-minus. Empty results say **No CI checks**.
 
-The inline chooser has the PR number, **Cancel**, the substituted message, existing agents in this space, installed new-agent choices, error feedback and a final **Send review** or **Start review** button. Choices use radio indicators. Settings contains **Review message**, a multiline field, placeholder instructions, inline validation, **Save**, **Use default** and saved feedback. The default message is `Review PR {pr_number}`.
+The inline chooser has the PR number, **Cancel**, the substituted message in a multiline field (labelled **Message · edited for this PR** with a **Use template** button once edited), existing agents in this space, installed new-agent choices, error feedback and a final **Send review** or **Start review** button. Choices use radio indicators. Settings contains **Review message**, a multiline field, placeholder instructions, inline validation, **Save**, **Use default** and saved feedback. The default message is `Review PR {pr_number}`.
 
 ## How it behaves
 
@@ -26,6 +26,8 @@ The focused terminal determines repository and machine. Focusing a mod pane pres
 List open PRs in most-recently-updated order, 20 at a time. **Mine** filters by the authenticated author; **To review** filters by review requests for that user. **Load more** asks for 20 additional results. Refresh every 60 seconds while visible and on the refresh button. Loading shows **Loading pull requests…**. Empty lists say **No open pull requests**, **No open pull requests of yours** or **No reviews requested**, with **Refresh to check GitHub again.** below. Errors show **Couldn't load pull requests** and the message. Missing tools, authentication and repository problems show errors; refreshing can retry.
 
 A row opens its exact GitHub URL. **Review** stops propagation and toggles the chooser without opening GitHub. Choosing a destination only selects it. The final dispatch button is disabled until a choice is made. Existing **idle** and **done** agents are selectable; **working** and **blocked** agents remain visible but muted and marked unavailable. Show each agent's program, tab name, literal status and terminal address. An exited agent cannot receive a message. Show installed new-agent programs in Herdr's preferred order; a new review opens a tab in this repository and space. Do not interrupt busy agents. Recheck readiness at send time. Prevent duplicate existing-agent sends; a failed send retains the chooser and error, and a successful send closes it with confirmation. Herdr handles new-agent launch errors. **Cancel** or Escape closes the chooser when no send is in progress.
+
+The chooser's message field starts as the saved template with the PR number filled in. Editing it changes only that PR's message; the template is untouched. Edits are kept per PR while the repository context stays the same, so closing and reopening the chooser keeps them. A successful send, **Use template**, or a repository or space change discards them. Saving Settings refreshes the field only for PRs without edits. A blank message cannot be sent.
 
 Settings stays in the same scrolling panel. Save a nonblank template containing `{pr_number}`; replace every occurrence when previewing or sending, preserving line breaks and literal characters. **Use default** saves the default immediately. Settings survive reloads and are shared between panel copies. No review is sent by opening the panel, opening Review, selecting a destination or editing Settings. No keyboard binding is required. There is no decorative motion.
 
@@ -54,7 +56,7 @@ CI rollups mix CheckRun `status`/`conclusion` with legacy StatusContext `state`.
 - View PRs sits immediately right of Changes and toggles the correct panel; other panels and per-space memory still work.
 - Open PRs load for the focused repository; filters and pagination work, and row clicks open the exact URLs.
 - Status and CI counts distinguish mixed failure/pending/success, skipped, unknown and empty results without falsely claiming success.
-- Review expands inline without navigating, previews the message, and shows live existing-agent statuses plus installed new-agent choices.
+- Review expands inline without navigating, shows the message for editing (per PR, not saved to the template), and shows live existing-agent statuses plus installed new-agent choices.
 - Dispatch targets the chosen existing idle agent, or starts the chosen program in the captured space and repository with the configured first message.
 - Settings saves multiline templates, replaces every PR placeholder, persists across reloads and rejects missing placeholders or blank text.
 - Repository-switch races, busy/exited agents and failed sends cannot misdirect input.

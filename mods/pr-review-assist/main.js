@@ -1,7 +1,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, TextareaState, Textarea } from "gpui-base";
 import { agents, spaces, panes, focused, layout, theme, exec, hc, run, shared, setShared, knownAgents, nextCommand, notify } from "herdr";
-import { DEFAULT_TEMPLATE, SETTINGS_KEY, READ, FILTERS, SEARCH, FIELDS, templateError, reviewMessage, find, contextKey, location, availableAgents, ready, failure, checkSummary, prStatus, reviewStatus } from "./model.js";
+import { DEFAULT_TEMPLATE, SETTINGS_KEY, READ, FILTERS, SEARCH, FIELDS, templateError, messageError, reviewMessage, find, contextKey, location, availableAgents, ready, failure, checkSummary, prStatus, reviewStatus } from "./model.js";
 
 export default class PrReviewAssist extends View {
   init(_props, cx) {
@@ -14,6 +14,12 @@ export default class PrReviewAssist extends View {
     this.input.on("focus", (_e, cx) => { this.inputFocus = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.inputFocus = false; cx.notify(); });
     this.draft = this.template;
+    this.edits = new Map();
+    this.message = TextareaState.new({ rows: 3 });
+    this.message.set_auto_grow(3, 10);
+    this.message.on("change", (_e, cx) => { this.recordEdit(); cx.notify(); });
+    this.message.on("focus", (_e, cx) => { this.messageFocus = true; cx.notify(); });
+    this.message.on("blur", (_e, cx) => { this.messageFocus = false; cx.notify(); });
     cx.timer.every(60000, (cx) => { if (this.shown()) this.refresh(cx); });
     cx.spawn(async (cx) => { for (;;) {
       const command = String(await nextCommand()).replace(/^pr-review-assist[.:]/, "");
@@ -32,6 +38,7 @@ export default class PrReviewAssist extends View {
     this.key = key; this.last = loc; this.generation++;
     this.prs = []; this.root = null; this.error = null; this.loading = false; this.more = false;
     this.selected = null; this.sendError = null; this.success = null; this.limit = 20;
+    this.edits.clear();
     if (this.shown()) this.refresh(cx);
   }
 
@@ -69,6 +76,25 @@ export default class PrReviewAssist extends View {
     this.selected = null; this.generation++; this.loading = false; this.refresh(cx);
   }
 
+  templateMessage(pr) {
+    const template = shared(SETTINGS_KEY)?.template ?? DEFAULT_TEMPLATE;
+    return templateError(template) ? "" : reviewMessage(template, pr.number);
+  }
+  messageFor(pr) { return this.edits.get(pr.number) ?? this.templateMessage(pr); }
+  recordEdit() {
+    const pr = this.selected;
+    if (!pr) return;
+    const value = this.message.value();
+    if (value === this.templateMessage(pr)) this.edits.delete(pr.number); else this.edits.set(pr.number, value);
+    this.sendError = null;
+  }
+  resetMessage(cx) {
+    if (!this.selected) return;
+    this.edits.delete(this.selected.number);
+    this.message.set_value(this.templateMessage(this.selected));
+    cx.notify();
+  }
+
   choose(pr, cx) {
     if (this.sending) return;
     this.selected = this.selected?.number === pr.number ? null : pr;
@@ -76,6 +102,7 @@ export default class PrReviewAssist extends View {
     this.choices = []; this.choicesError = null;
     const selection = this.selected, key = this.key;
     if (selection) {
+      this.message.set_value(this.messageFor(selection));
       this.choicesLoading = true;
       cx.spawn(async (cx) => {
         try {
@@ -93,6 +120,7 @@ export default class PrReviewAssist extends View {
     if (error) return;
     this.template = this.draft;
     setShared(SETTINGS_KEY, { template: this.template });
+    if (this.selected && !this.edits.has(this.selected.number)) this.message.set_value(this.templateMessage(this.selected));
     this.settingsSaved = true; cx.notify();
   }
 
@@ -101,16 +129,15 @@ export default class PrReviewAssist extends View {
     const pr = this.selected, loc = { ...this.last }, key = this.key, root = this.root;
     const destination = { ...this.destination };
     if (key !== contextKey(this.loc()) || this.loadedKey !== key || !root) return;
-    let message;
-    try { message = reviewMessage(shared(SETTINGS_KEY)?.template ?? DEFAULT_TEMPLATE, pr.number); }
-    catch (e) { this.sendError = e.message; cx.notify(); return; }
+    const message = this.messageFor(pr), error = messageError(message);
+    if (error) { this.sendError = error; cx.notify(); return; }
     this.sendError = null;
     if (destination.kind === "new") {
       const program = this.choices.find(a => a.key === destination.key);
       if (!program) return;
       // The app owns agent startup/readiness and supplies the initial task.
       run("tab.new", { space: loc.space, folder: root, name: `Review PR #${pr.number}`, argv: program.run, task: message });
-      this.selected = null; cx.notify(); return;
+      this.edits.delete(pr.number); this.selected = null; cx.notify(); return;
     }
     const agent = availableAgents(agents(), loc.space).find(a => a.address === destination.address);
     if (!ready(agent)) { this.sendError = "This agent is no longer ready. Choose an idle agent or start a new one."; cx.notify(); return; }
@@ -121,7 +148,7 @@ export default class PrReviewAssist extends View {
         const result = await hc(["send", agent.address, message, "--if", "idle", "--json"]);
         if (result.code !== 0) throw new Error(failure(result, "The review message could not be sent."));
         notify({ title: `Review PR #${pr.number} sent`, body: `${agent.program?.name ?? agent.app} · ${agent.tab_name}`, level: "info", timeout: 4 });
-        if (this.key === key) { this.selected = null; this.success = `Sent review for #${pr.number} to ${agent.program?.name ?? agent.app}.`; }
+        if (this.key === key) { this.edits.delete(pr.number); this.selected = null; this.success = `Sent review for #${pr.number} to ${agent.program?.name ?? agent.app}.`; }
       } catch (e) { if (this.key === key) this.sendError = String(e.message ?? e); }
       finally { this.sending = false; cx.notify(); }
     });
@@ -162,14 +189,16 @@ export default class PrReviewAssist extends View {
 
   reviewView(t) {
     const pr = this.selected, list = availableAgents(agents(), this.last?.space);
-    const template = shared(SETTINGS_KEY)?.template ?? DEFAULT_TEMPLATE;
-    const message = templateError(template) ? "Save a valid message in Settings." : reviewMessage(template, pr.number);
+    const edited = this.edits.has(pr.number), messageProblem = messageError(this.messageFor(pr));
     return v_flex().flex_none().mx(6).mb(8).p(10).gap(8).border_1().border_color(t.border).rounded(7)
       .child(h_flex().items_center().justify_between()
         .child(div().font_semibold().child(`Review PR #${pr.number}`))
         .child(this.button("review-cancel", "Cancel", cx => { if (!this.sending) { this.selected = null; cx.notify(); } }, t, false, !this.sending)))
-      .child(div().text_size(11).text_color(t.dim).child("Message"))
-      .child(div().p(8).rounded(5).bg(t.chrome).text_size(12).child(message))
+      .child(h_flex().items_center().justify_between().min_h(28)
+        .child(div().text_size(11).text_color(t.dim).child(edited ? "Message · edited for this PR" : "Message"))
+        .when(edited, e => e.child(this.button("message-reset", "Use template", cx => this.resetMessage(cx), t, false, !this.sending))))
+      .child(Textarea.new(this.message).w_full().min_h(72).p(8).rounded(5).border_1().border_color(this.messageFocus ? t.accent : t.input).bg(t.chrome).text_size(12).text_color(t.foreground))
+      .when(Boolean(messageProblem), e => e.child(div().text_size(12).text_color(t.ansi1).child(messageProblem)))
       .child(div().text_size(11).text_color(t.dim).child("Existing agent in this space"))
       .children(list.map(a => this.choice(`agent-${a.address}`, `${a.program?.name ?? a.app} · ${a.tab_name}`, `${a.status} · ${a.address}${ready(a) ? "" : " · unavailable"}`, { kind: "existing", address: a.address }, ready(a), t)))
       .when(!list.length, e => e.child(div().text_size(12).text_color(t.muted).child("No agents in this space. Start one below.")))
@@ -178,7 +207,7 @@ export default class PrReviewAssist extends View {
       .when(this.choicesLoading, e => e.child(div().text_size(12).text_color(t.muted).child("Checking installed agents…")))
       .when(!this.choicesLoading && !this.choices.length, e => e.child(div().text_size(12).text_color(t.muted).child(this.choicesError || "No installed agents found. Check Herdr's agent configuration.")))
       .when(Boolean(this.sendError), e => e.child(div().text_size(12).text_color(t.ansi1).child(this.sendError)))
-      .child(this.button("send-review", this.sending ? "Sending…" : this.destination?.kind === "new" ? "Start review" : "Send review", cx => this.send(cx), t, true, Boolean(this.destination) && !this.sending && !templateError(template)));
+      .child(this.button("send-review", this.sending ? "Sending…" : this.destination?.kind === "new" ? "Start review" : "Send review", cx => this.send(cx), t, true, Boolean(this.destination) && !this.sending && !messageProblem));
   }
 
   row(pr, t) {

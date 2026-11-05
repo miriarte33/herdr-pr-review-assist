@@ -27,14 +27,14 @@ async function harness() {
     if (key === 'id') o.elementId = args[0];
     return proxy(o);
   } }); }
-  const text = { value: '', set_auto_grow() {}, on() {}, set_value(v) { this.value = v; } };
+  const textarea = () => ({ text: '', handlers: {}, set_auto_grow() {}, on(event, fn) { this.handlers[event] = fn; }, value() { return this.text; }, set_value(v) { this.text = v; } });
   const modules = new Map();
   function host(name, exports) {
     const module = new vm.SyntheticModule(Object.keys(exports), function () { for (const [k,v] of Object.entries(exports)) this.setExport(k,v); }, { context });
     modules.set(name, module);
   }
   host('gpui-kit', { View: class {}, div: tree, svg: tree });
-  host('gpui-base', { v_flex: tree, h_flex: tree, TextareaState: { new: () => text }, Textarea: { new: tree } });
+  host('gpui-base', { v_flex: tree, h_flex: tree, TextareaState: { new: textarea }, Textarea: { new: tree } });
   host('herdr', {
     agents: () => state.agents, spaces: () => [{ id: state.space, active: true, folder: state.cwd, machine: null }], panes: () => [],
     focused: () => ({ space: state.space, cwd: state.cwd }),
@@ -55,6 +55,7 @@ async function harness() {
 }
 const pr = { number: 25, title: 'Fix login', url: 'https://github.com/example/repo/pull/25', author: { login: 'dev' }, headRefName: 'fix', baseRefName: 'main' };
 const idle = { address: 't1', space: 's1', status: 'idle', program: { name: 'Codex' }, tab_name: 'Fix login' };
+function type(h, value) { h.mod.message.set_value(value); h.mod.message.handlers.change({}, h.cx); }
 async function loaded() { const h = await harness(); h.mod.render(h.cx); await h.flush(); h.mod.prs = [pr]; return h; }
 
 test('message substitutes every PR placeholder, preserving literal command characters', () => {
@@ -172,4 +173,40 @@ test('PR rows render status and CI counts for mixed results', async () => {
   const text = strings(row).join(' ');
   assert.match(text, /Open/); assert.match(text, /Changes requested/);
   assert.match(text, /1 failing · 1 passing · 1 pending/);
+});
+
+test('review message can be edited for one PR without changing the template or other PRs', async () => {
+  const h = await loaded(); h.state.agents = [idle];
+  h.state.values['pr-review-assist.settings'] = { template:'Please review #{pr_number}' };
+  const other = { ...pr, number: 26 };
+  h.mod.choose(pr, h.cx); await h.flush();
+  assert.equal(h.mod.message.value(), 'Please review #25');
+  type(h, 'Please review #25, skip the generated files');
+  h.mod.choose(other, h.cx); await h.flush();
+  assert.equal(h.mod.message.value(), 'Please review #26');
+  h.mod.choose(pr, h.cx); await h.flush();
+  assert.equal(h.mod.message.value(), 'Please review #25, skip the generated files');
+  h.mod.render(h.cx);
+  h.mod.destination = { kind:'existing', address:'t1' }; h.mod.send(h.cx); await h.flush();
+  const sent = h.state.calls.find(c => c[0] === 'hc');
+  assert.equal(sent[1][2], 'Please review #25, skip the generated files');
+  assert.equal(h.state.values['pr-review-assist.settings'].template, 'Please review #{pr_number}');
+  h.mod.choose(pr, h.cx); await h.flush();
+  assert.equal(h.mod.message.value(), 'Please review #25');
+});
+test('edited message starts a new agent and blank messages are rejected', async () => {
+  const h = await loaded(); h.mod.choose(pr, h.cx); await h.flush();
+  type(h, '  '); h.mod.destination = { kind:'new', key:'codex' }; h.mod.send(h.cx);
+  assert.equal(h.state.calls.length, 0); assert.equal(h.mod.sendError, 'Enter a review message.');
+  type(h, 'Only check the migration in PR 25'); h.mod.send(h.cx);
+  assert.equal(h.state.calls[0][1].task, 'Only check the migration in PR 25');
+});
+test('Use template discards the edit, and saving settings updates unedited previews', async () => {
+  const h = await loaded(); h.mod.choose(pr, h.cx); await h.flush();
+  type(h, 'Custom'); h.mod.resetMessage(h.cx);
+  assert.equal(h.mod.message.value(), 'Review PR 25'); assert.equal(h.mod.edits.size, 0);
+  h.mod.draft = 'Look at {pr_number}'; h.mod.saveSettings(h.cx);
+  assert.equal(h.mod.message.value(), 'Look at 25');
+  type(h, 'Custom'); h.mod.draft = 'Again {pr_number}'; h.mod.saveSettings(h.cx);
+  assert.equal(h.mod.message.value(), 'Custom');
 });

@@ -5,7 +5,7 @@ A native Herdr desktop mod. **View PRs**, immediately to the right of **Changes*
 - Each PR shows its lifecycle status and review decision, plus CI passing/failing counts. A green check means passing, a red cross means failing, and an amber clock means pending. Skipped and unknown results stay separate; PRs without checks show “No CI checks.”
 - Click a PR row to open it on GitHub.
 - Click **Review** to choose an existing idle agent in this space or start an installed agent in a new tab in this repository.
-- The chooser previews the exact message. Click **Send review** or **Start review** to dispatch it.
+- The chooser shows the message in an editable field. Edits apply to that PR only and leave the saved template alone. **Use template** discards them. Click **Send review** or **Start review** to dispatch it.
 - Open **Settings** in the same panel to edit and save the message template. The default is `Review PR {pr_number}`. Multiline messages and repeated placeholders work.
 - **All**, **Mine**, and **To review** filter open PRs. Lists load 20 at a time and refresh every minute while visible.
 
@@ -41,7 +41,7 @@ herdr-app check ~/.config/herdr-app/mods/pr-review-assist
 herdr-app check ~/.config/herdr-app/mods/pr-review-assist-tabs
 ```
 
-The tests execute the actual mod with mocked host APIs, covering repository races, row navigation, Review event propagation, saved templates, existing-agent guards, new-agent arguments, and send failures. They do not message live agents. The mod was also rendered in Herdr against a real GitHub PR, including settings and installed-agent choices.
+The tests execute the actual mod with mocked host APIs, covering repository races, row navigation, Review event propagation, saved templates, per-PR message edits, existing-agent guards, new-agent arguments, and send failures. They do not message live agents. The mod was also rendered in Herdr against a real GitHub PR, including settings and installed-agent choices.
 
 Optional mod commands: `pr-review-assist.refresh`, `pr-review-assist.settings` (toggle), and `pr-review-assist.review-<number>` (toggle the chooser for a loaded PR, e.g. `review-2`). No command sends a review without the user's button click.
 
